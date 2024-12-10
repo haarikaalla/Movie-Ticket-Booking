@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book My Ticket</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        form {
+            margin-top: 20px;
+        }
+        select, button {
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <!-- Step 1: City Selection -->
+    <div id="step1">
+        <h1>Welcome to Book My Application</h1>
+        <form id="cityForm" onsubmit="return goToMovies(event)">
+            <label for="city">Select your city:</label><br>
+            <select id="city" required>
+                <option value="Bangalore">Bangalore</option>
+                <option value="Pune">Pune</option>
+                <option value="Delhi">Delhi</option>
+                <option value="Mumbai">Mumbai</option>
+            </select><br>
+            <button type="submit">Next</button>
+        </form>
+    </div>
+
+    <!-- Step 2: Movie Selection -->
+    <div id="step2" style="display: none;">
+        <h1>Select a Movie</h1>
+        <form id="movieForm" onsubmit="return goToTheaters(event)">
+            <label for="movie">Select movie:</label><br>
+            <select id="movie" required>
+                <option value="XYZ">XYZ</option>
+                <option value="PQR">PQR</option>
+                <option value="OPQ">OPQ</option>
+            </select><br>
+            <button type="submit">Next</button>
+        </form>
+    </div>
+
+    <!-- Step 3: Theatre Selection -->
+    <div id="step3" style="display: none;">
+        <h1>Select a Theatre</h1>
+        <form id="theatreForm" onsubmit="return goToScreens(event)">
+            <label for="theatre">Select theatre:</label><br>
+            <select id="theatre" required>
+                <option value="INOX">INOX</option>
+                <option value="PVR">PVR</option>
+            </select><br>
+            <button type="submit">Next</button>
+        </form>
+    </div>
+
+    <!-- Step 4: Screen Selection -->
+    <div id="step4" style="display: none;">
+        <h1>Select a Screen</h1>
+        <form id="screenForm" onsubmit="return goToTimings(event)">
+            <label for="screen">Choose your screen:</label><br>
+            <select id="screen" required>
+                <option value="1">Screen 1</option>
+                <option value="2">Screen 2</option>
+                <option value="3">Screen 3</option>
+            </select><br>
+            <button type="submit">Next</button>
+        </form>
+    </div>
+
+    <!-- Step 5: Timing Selection -->
+    <div id="step5" style="display: none;">
+        <h1>Select a Timing</h1>
+        <form id="timingForm" onsubmit="return confirmBooking(event)">
+            <label for="timing">Select time slot:</label><br>
+            <select id="timing" required>
+                <option value="10:00-1:00">10:00-1:00</option>
+                <option value="1:10-4:10">1:10-4:10</option>
+                <option value="4:20-7:20">4:20-7:20</option>
+                <option value="7:30-10:30">7:30-10:30</option>
+            </select><br>
+            <button type="submit">Confirm Booking</button>
+        </form>
+    </div>
+
+    <!-- Booking Confirmation -->
+    <div id="confirmation" style="display: none;">
+        <h1>Booking Confirmed</h1>
+        <p>City: <span id="confirmCity"></span></p>
+        <p>Movie: <span id="confirmMovie"></span></p>
+        <p>Theatre: <span id="confirmTheatre"></span></p>
+        <p>Screen: <span id="confirmScreen"></span></p>
+        <p>Timing: <span id="confirmTiming"></span></p>
+        <button onclick="restartBooking()">Book Another Ticket</button>
+    </div>
+
+    <script>
+        // JavaScript to manage navigation between steps
+        function goToMovies(event) {
+            event.preventDefault();
+            document.getElementById("step1").style.display = "none";
+            document.getElementById("step2").style.display = "block";
+        }
+
+        function goToTheaters(event) {
+            event.preventDefault();
+            document.getElementById("step2").style.display = "none";
+            document.getElementById("step3").style.display = "block";
+        }
+
+        function goToScreens(event) {
+            event.preventDefault();
+            document.getElementById("step3").style.display = "none";
+            document.getElementById("step4").style.display = "block";
+        }
+
+        function goToTimings(event) {
+            event.preventDefault();
+            document.getElementById("step4").style.display = "none";
+            document.getElementById("step5").style.display = "block";
+        }
+
+        function confirmBooking(event) {
+            event.preventDefault();
+            // Gather data from the forms
+            const city = document.getElementById("city").value;
+            const movie = document.getElementById("movie").value;
+            const theatre = document.getElementById("theatre").value;
+            const screen = document.getElementById("screen").value;
+            const timing = document.getElementById("timing").value;
+
+            // Display confirmation
+            document.getElementById("step5").style.display = "none";
+            document.getElementById("confirmation").style.display = "block";
+            document.getElementById("confirmCity").innerText = city;
+            document.getElementById("confirmMovie").innerText = movie;
+            document.getElementById("confirmTheatre").innerText = theatre;
+            document.getElementById("confirmScreen").innerText = screen;
+            document.getElementById("confirmTiming").innerText = timing;
+        }
+
+        function restartBooking() {
+            document.getElementById("confirmation").style.display = "none";
+            document.getElementById("step1").style.display = "block";
+        }
+    </script>
+</body>
+</html>
