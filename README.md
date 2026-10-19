@@ -1,233 +1,225 @@
+<div align="center">
+
 # BookMyMovie
 
-**A concurrency-safe movie seat inventory and booking API designed around the hardest part of ticketing: preventing double bookings.**
+### Real-time cinema discovery, seat reservation, checkout, and ticketing
 
 [![CI](https://github.com/haarikaalla/Movie-Ticket-Booking/actions/workflows/ci.yml/badge.svg)](https://github.com/haarikaalla/Movie-Ticket-Booking/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-13%20passing-2EA043)
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115%2B-009688?logo=fastapi&logoColor=white)
-![Pydantic](https://img.shields.io/badge/Pydantic-v2-E92063?logo=pydantic&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![React](https://img.shields.io/badge/React-TypeScript-61DAFB?logo=react&logoColor=black)
+![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
 
-BookMyMovie is an end-to-end backend service for show inventory, temporary seat holds, availability, and idempotent booking confirmation. It upgrades a command-line learning exercise into a structured, tested, containerized API with transactional guarantees and a versioned service contract.
+**A production-minded full-stack booking platform built around the hardest part of ticketing: maintaining correct inventory while customers compete for the same seats.**
 
-The design targets the failure modes that matter in real booking systems: competing customers selecting the same seat, abandoned checkouts blocking inventory forever, payment retries creating duplicate orders, invalid seat numbers, and inconsistent availability reads.
+</div>
+
+---
 
 ## Why this project matters
 
-Ticket booking is a deceptively difficult inventory problem. During popular releases, many customers may request the same limited seats at nearly the same time. A correct system must temporarily reserve inventory, release abandoned holds, reject conflicts, and make retries safe.
+BookMyMovie is not a static booking form. It is a complete transaction workflow with a responsive customer application, versioned API, relational domain model, live inventory events, expiring reservations, tiered pricing, simulated payment confirmation, and automated delivery gates.
 
-BookMyMovie provides a compact reference implementation of those concepts:
+It handles the failure cases that make real booking systems difficult:
 
-- transactional seat holds serialize competing inventory changes;
-- database uniqueness rules prevent a seat from being held twice;
-- five-minute hold expiration releases abandoned inventory;
-- idempotency keys make booking confirmation safe to retry;
-- strict request models reject malformed data before business logic runs;
-- versioned REST endpoints and OpenAPI documentation support client integration;
-- tests exercise the business invariants, not only successful responses.
+- two customers attempting to reserve the same seat;
+- abandoned checkouts blocking inventory indefinitely;
+- payment retries creating duplicate bookings;
+- stale seat maps during high-demand sales;
+- invalid selections and malformed client input;
+- frontend and backend contracts drifting apart.
 
-## Core capabilities
+## Product experience
 
-| Capability | Implementation | Business impact |
-| --- | --- | --- |
-| Live availability | Calculates unclaimed seats for a show | Customers see usable inventory |
-| Temporary holds | UUID-based hold with UTC expiration | Checkout gets a protected reservation window |
-| Conflict prevention | Transaction + unique `(show_id, seat_number)` constraint | Eliminates double booking at the database boundary |
-| Automatic release | Expired holds are cleared during inventory operations | Abandoned carts do not permanently consume seats |
-| Idempotent confirmation | Unique `Idempotency-Key` | Network or payment retries return the same booking |
-| Validated API | FastAPI and Pydantic v2 | Invalid requests receive consistent errors |
-| Portable runtime | Python package and Docker image | Runs locally, in CI, or as a container |
+The React application supports the full customer journey:
 
-## System architecture
+1. Discover a curated catalogue and search by title or genre.
+2. Compare theatres, formats, showtimes, ratings, languages, and prices.
+3. Open a live auditorium map with Classic, Prime, and Recliner tiers.
+4. Select up to ten seats with immediate server-owned pricing.
+5. Protect the selection behind a five-minute checkout hold.
+6. Choose a simulated UPI, card, or wallet payment experience.
+7. Receive a digital ticket with booking and payment references.
+
+The interface is responsive across desktop and mobile and includes loading, conflict, empty, and error states.
+
+> Payment is intentionally simulated. No card or UPI data is collected and no real funds are moved.
+
+## Architecture
 
 ```mermaid
 flowchart LR
-    CLIENT[Web or mobile client] -->|REST / JSON| API[FastAPI v1 API]
-    API --> VALIDATE[Pydantic request validation]
-    VALIDATE --> SERVICE[BookingService domain logic]
-    SERVICE --> TX[SQLite transactional boundary]
-    TX --> DB[(Movies, shows, holds, seats, bookings)]
-    PAYMENT[Payment retry] -->|Idempotency-Key| API
+    USER[Customer] --> WEB[React + TypeScript SPA]
+    WEB -->|REST / JSON| API[FastAPI v2 API]
+    WEB <-->|WebSocket inventory events| API
+    API --> VALIDATE[Pydantic contracts]
+    VALIDATE --> DOMAIN[BookingService domain layer]
+    DOMAIN --> TX[Transactional inventory boundary]
+    TX --> DB[(SQLite relational store)]
+    DOMAIN --> AUDIT[(Booking event ledger)]
     API --> DOCS[OpenAPI /docs]
+
+    subgraph Delivery
+      CI[GitHub Actions]
+      IMAGE[Multi-stage Docker image]
+    end
+
+    CI --> WEB
+    CI --> API
+    WEB --> IMAGE
+    API --> IMAGE
 ```
 
 ### Booking lifecycle
 
 ```mermaid
 sequenceDiagram
-    participant C as Customer
-    participant A as API
-    participant S as Booking service
-    participant D as Database
-    C->>A: GET show availability
-    A->>S: availability(show_id)
-    S->>D: expire old holds + read inventory
-    D-->>C: available seats
-    C->>A: POST seat hold
-    A->>S: validate and hold seats
-    S->>D: BEGIN IMMEDIATE + unique seat inserts
-    D-->>C: hold_id and expires_at
-    C->>A: POST booking + Idempotency-Key
-    A->>S: confirm hold
-    S->>D: return existing result or create booking
-    D-->>C: stable booking response
+    actor Customer
+    participant UI as React client
+    participant API as FastAPI
+    participant Service as BookingService
+    participant DB as Relational store
+
+    Customer->>UI: Select show and seats
+    UI->>API: POST /v1/holds
+    API->>Service: Validate and reserve
+    Service->>DB: BEGIN IMMEDIATE
+    DB-->>Service: Unique seat claims committed
+    Service-->>UI: hold_id + amount + expires_at
+    API-->>UI: WebSocket inventory.changed
+    Customer->>UI: Confirm demo payment
+    UI->>API: POST /v1/bookings + Idempotency-Key
+    API->>Service: Confirm active hold
+    Service->>DB: Create booking + event atomically
+    Service-->>UI: Stable digital ticket
 ```
+
+## Engineering highlights
+
+| Concern | Implementation | Why it matters |
+| --- | --- | --- |
+| Double-booking prevention | Transaction plus unique `(show_id, seat_number)` constraint | Correctness is enforced at the database boundary |
+| Checkout reservations | UUID hold with UTC expiry | Customers receive a protected purchase window |
+| Inventory recovery | Automatic expired-hold cleanup | Abandoned checkouts return seats to inventory |
+| Safe payment retry | Idempotency key bound to one hold | Retries never create duplicate tickets |
+| Live availability | Show-scoped WebSocket channel | Open clients refresh when inventory changes |
+| Tiered pricing | Server-owned seat price calculation | The browser cannot define the amount it pays |
+| API safety | Pydantic contracts and consistent 4xx errors | Invalid data is rejected before domain execution |
+| Auditability | Immutable confirmation event | Important transitions have an evidence trail |
+| Production delivery | Multi-stage build and non-root runtime | One container serves the optimized UI and API |
+| Quality gates | Python and TypeScript test/build jobs | Both application layers are checked in CI |
 
 ## Technology stack
 
-- **Python 3.11+** — application and domain layer
-- **FastAPI** — high-performance ASGI API and generated OpenAPI schema
-- **Pydantic v2** — typed request constraints and serialization
-- **SQLite** — zero-infrastructure relational persistence and transactions
-- **Uvicorn** — production-capable ASGI server
-- **Hatchling** — modern package build system
-- **pytest + HTTPX** — service and API test tooling
-- **Ruff** — linting and code-quality enforcement
-- **Docker** — reproducible deployment with a persistent data volume
-- **GitHub Actions** — tests and linting on every push and pull request
+**Frontend:** React 19, TypeScript 6, Vite 8, native WebSockets, responsive CSS, Vitest.
 
-## API reference
+**Backend:** Python 3.11+, FastAPI, Pydantic v2, SQLite transactions, OpenAPI, pytest, HTTPX, Ruff.
 
-Start the application and open `http://127.0.0.1:8000/docs` for the interactive OpenAPI console.
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| `GET` | `/health` | Service health and current UTC time |
-| `GET` | `/v1/shows/{show_id}/availability` | List currently available seat numbers |
-| `POST` | `/v1/holds` | Reserve one to ten seats temporarily |
-| `POST` | `/v1/bookings` | Confirm an active hold idempotently |
-
-### Create a hold
-
-```bash
-curl -X POST http://127.0.0.1:8000/v1/holds \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "show_id": 1,
-    "customer_id": "customer-42",
-    "seat_numbers": [4, 5]
-  }'
-```
-
-Successful response:
-
-```json
-{
-  "hold_id": "a-generated-uuid",
-  "show_id": 1,
-  "seats": [4, 5],
-  "expires_at": "2026-10-17T12:05:00+00:00"
-}
-```
-
-### Confirm a booking safely
-
-```bash
-curl -X POST http://127.0.0.1:8000/v1/bookings \
-  -H 'Content-Type: application/json' \
-  -H 'Idempotency-Key: payment-attempt-123' \
-  -d '{"hold_id": "a-generated-uuid"}'
-```
-
-Repeating the request with the same idempotency key returns the original booking instead of creating another one.
+**Delivery:** Docker multi-stage build, non-root runtime, health check, persistent volume, GitHub Actions.
 
 ## Quick start
 
-### Prerequisites
-
-- Python 3.11+
-- Git
-
-### Install and run
+### Production-style preview
 
 ```bash
-git clone https://github.com/haarikaalla/Movie-Ticket-Booking.git
-cd Movie-Ticket-Booking
+docker compose up --build
+```
 
+Then open:
+
+- application: <http://localhost:8000>
+- API documentation: <http://localhost:8000/docs>
+- health endpoint: <http://localhost:8000/health>
+
+The service initializes its schema and demo catalogue automatically. Data persists in the `booking-data` Docker volume.
+
+### Local development
+
+Backend:
+
+```bash
 python -m venv .venv
-source .venv/bin/activate            # Windows: .venv\Scripts\activate
-python -m pip install --upgrade pip
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e '.[dev]'
-
 uvicorn bookmymovie.api:app --reload
 ```
 
-The API creates `bookings.db` automatically. Set `BOOKING_DB` to use another path:
+Frontend, in another terminal:
 
 ```bash
-BOOKING_DB=/tmp/bookmymovie.db uvicorn bookmymovie.api:app --reload
+cd frontend
+npm install
+npm run dev
 ```
 
-Movies and shows can be seeded through `BookingService.create_movie()` and `create_show()` before exercising customer endpoints. This keeps catalogue administration separate from the public booking contract.
+Vite runs at <http://localhost:5173> and proxies API calls to port `8000`.
 
-## Docker
+## API surface
 
-```bash
-docker build -t bookmymovie .
-docker run --rm -p 8000:8000 -v bookmymovie-data:/data bookmymovie
-```
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/health` | Runtime health and service version |
+| `GET` | `/v1/catalogue` | Searchable, city-filtered films and shows |
+| `GET` | `/v1/shows/{id}/seats` | Priced live seat map |
+| `GET` | `/v1/shows/{id}/availability` | Available seat numbers |
+| `WS` | `/v1/shows/{id}/events` | Inventory change notifications |
+| `POST` | `/v1/holds` | Atomically reserve one to ten seats |
+| `GET` | `/v1/holds/{id}` | Retrieve authoritative checkout state |
+| `DELETE` | `/v1/holds/{id}` | Release a checkout immediately |
+| `POST` | `/v1/bookings` | Confirm with an `Idempotency-Key` |
+| `GET` | `/v1/bookings/{id}` | Retrieve a digital ticket |
 
-The container stores its SQLite database at `/data/bookings.db`, backed by the named volume.
+## Data integrity
 
-## Data integrity model
+The relational schema makes business invariants enforceable:
 
-The relational schema makes correctness enforceable:
+- shows, holds, bookings, and events have valid parent records;
+- a seat can occur only once per show while held or booked;
+- each hold and each idempotency key can produce at most one booking;
+- status values, ratings, prices, durations, and seat counts are constrained;
+- SQLite uses `BEGIN IMMEDIATE` for inventory mutations so competing writers cannot reserve the same seat.
 
-- foreign keys link shows to movies, holds to shows, and bookings to holds;
-- checks require positive durations and seat counts;
-- one composite uniqueness constraint protects each seat within a show;
-- each hold can create at most one booking;
-- each idempotency key can create at most one booking;
-- hold status is restricted to `active`, `confirmed`, or `expired`.
+The domain contract can later move to PostgreSQL row locking without changing the customer-facing API.
 
-Application transactions use `BEGIN IMMEDIATE` so competing SQLite writers cannot both observe the same seat as available and then reserve it independently.
-
-## Error behavior
-
-| Status | Meaning |
-| --- | --- |
-| `201` | Hold or booking created |
-| `404` | Show does not exist |
-| `409` | Seat is unavailable, hold is missing, or hold expired |
-| `422` | Request or seat selection is invalid |
-
-## Quality and testing
+## Testing
 
 ```bash
 ruff check src tests
 pytest
+
+cd frontend
+npm test
+npm run build
 ```
 
-Tests verify inventory removal, double-booking rejection, idempotent confirmation, and invalid-seat protection. GitHub Actions recreates the environment and runs the same checks for each push and pull request.
+The current suite has **13 passing tests** across backend and frontend. Coverage includes catalogue grouping, seat tiers and pricing, conflicting holds, idempotent confirmation, idempotency misuse, hold release, invalid selections, API errors, the complete customer journey, and frontend price calculation.
 
-## Project structure
+## Repository structure
 
 ```text
 .
-├── .github/workflows/ci.yml       # automated lint and tests
+├── frontend/
+│   ├── src/
+│   │   ├── App.tsx             # complete customer journey
+│   │   ├── api.ts              # typed API client
+│   │   ├── types.ts            # frontend domain types
+│   │   └── styles.css          # responsive visual system
+│   └── vite.config.ts          # development proxy + production build
 ├── src/bookmymovie/
-│   ├── api.py                     # FastAPI routes and request models
-│   ├── database.py                # schema and connection management
-│   └── service.py                 # transactions and booking rules
-├── tests/test_booking_service.py  # business-invariant tests
-├── Dockerfile                     # containerized API runtime
-├── pyproject.toml                 # package and tool configuration
-└── LICENSE
+│   ├── api.py                  # REST routes, WebSockets, SPA delivery
+│   ├── database.py             # schema and migration compatibility
+│   └── service.py              # catalogue, inventory, checkout, ticketing
+├── tests/                      # domain and end-to-end API tests
+├── .github/workflows/ci.yml    # frontend and backend CI jobs
+├── Dockerfile                  # multi-stage non-root image
+└── docker-compose.yml          # one-command deployment
 ```
 
-## Scaling roadmap
+## Production evolution
 
-SQLite is ideal for a self-contained demonstration. A production evolution would preserve the API and domain rules while adding:
-
-- PostgreSQL with row-level locking or atomic conflict handling;
-- payment-provider webhooks and refund workflows;
-- transactional outbox events for email, analytics, and fulfilment;
-- catalogue and show-management APIs with role-based access;
-- distributed expiration workers and reservation metrics;
-- authentication, authorization, rate limiting, and audit logs;
-- tracing, structured logs, dashboards, and load tests;
-- a responsive customer frontend consuming the versioned API.
+The implementation deliberately keeps infrastructure local and reviewable. A larger deployment would retain the same API and invariants while adding PostgreSQL row locking, Redis expiry workers, a signed payment webhook, OIDC authentication, transactional outbox events, OpenTelemetry traces, Prometheus metrics, load tests, and horizontally scaled API instances.
 
 ## License
 
-This project is available under the [MIT License](LICENSE).
+Released under the [MIT License](LICENSE).

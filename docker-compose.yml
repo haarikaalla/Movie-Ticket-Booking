@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - booking-data:/data
+    environment:
+      CORS_ORIGINS: http://localhost:8000
+    restart: unless-stopped
+
+volumes:
+  booking-data:

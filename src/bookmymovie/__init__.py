@@ -1,5 +1,5 @@
 """BookMyMovie service package."""
 
-from .service import BookingService, SeatUnavailable
+from .service import BookingNotFound, BookingService, SeatUnavailable
 
-__all__ = ["BookingService", "SeatUnavailable"]
+__all__ = ["BookingNotFound", "BookingService", "SeatUnavailable"]

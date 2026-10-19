@@ -7,3 +7,10 @@ __pycache__/
 .env
 dist/
 *.egg-info/
+frontend/node_modules/
+frontend/dist/
+src/bookmymovie/static/
+coverage/
+*.tsbuildinfo
+frontend/vite.config.js
+frontend/vite.config.d.ts
