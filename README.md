@@ -95,6 +95,68 @@ sequenceDiagram
     Service-->>UI: Stable digital ticket
 ```
 
+## How the frontend, APIs, and backend work together
+
+The booking experience is driven by real API calls. The React application never modifies inventory directly; it asks the FastAPI backend to perform each operation, and the backend treats the database as the source of truth.
+
+| Customer action | Frontend request | Backend responsibility | Result returned to the UI |
+| --- | --- | --- | --- |
+| Opens the application | `GET /v1/catalogue` | Reads movies, theatres, formats, prices, and showtimes | Searchable film catalogue |
+| Chooses a show | `GET /v1/shows/{id}/seats` | Expires stale holds and calculates every seat's status, tier, and price | Authoritative live seat map |
+| Keeps the seat map open | `WS /v1/shows/{id}/events` | Publishes an event whenever a hold or booking changes inventory | Other open clients refresh automatically |
+| Selects seats and continues | `POST /v1/holds` | Starts a transaction, validates the show and seats, claims inventory, and creates a five-minute hold | Hold ID, selected seats, total amount, and expiry time |
+| Leaves checkout | `DELETE /v1/holds/{id}` | Releases the active hold and returns its seats to inventory | Released checkout state |
+| Confirms payment | `POST /v1/bookings` with `Idempotency-Key` | Revalidates the hold, calculates the server-owned total, creates the booking and audit event atomically | Confirmed digital ticket and payment reference |
+| Opens a ticket later | `GET /v1/bookings/{id}` | Reads the persisted booking, show, theatre, and seat records | Stable ticket details |
+
+### Example booking interaction
+
+The frontend first asks the backend to protect the selected seats:
+
+```http
+POST /v1/holds
+Content-Type: application/json
+
+{
+  "show_id": 3,
+  "customer_id": "viewer@example.com",
+  "seat_numbers": [17, 18]
+}
+```
+
+The backend responds with an expiring reservation and the authoritative price:
+
+```json
+{
+  "hold_id": "b8be1675-6a5b-4b60-b06a-e32c97b897ec",
+  "show_id": 3,
+  "seats": [
+    {"number": 17, "label": "C1", "tier": "Classic", "price": 220},
+    {"number": 18, "label": "C2", "tier": "Classic", "price": 220}
+  ],
+  "amount": 440,
+  "expires_at": "2026-10-20T15:05:00+00:00",
+  "status": "active"
+}
+```
+
+Checkout then confirms that hold using an idempotency key:
+
+```http
+POST /v1/bookings
+Content-Type: application/json
+Idempotency-Key: checkout-attempt-1001
+
+{
+  "hold_id": "b8be1675-6a5b-4b60-b06a-e32c97b897ec",
+  "payment_method": "upi"
+}
+```
+
+If the browser retries this request, the backend returns the original booking instead of creating a second ticket. The confirmed seats remain unavailable and every connected seat map receives an `inventory.changed` WebSocket event.
+
+> The ticket-booking workflow, database writes, inventory protection, totals, and digital ticket are fully implemented. Only the external payment provider is simulated, so the project can be demonstrated safely without collecting financial information.
+
 ## Engineering highlights
 
 | Concern | Implementation | Why it matters |
